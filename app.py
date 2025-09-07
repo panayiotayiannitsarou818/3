@@ -784,44 +784,43 @@ st.divider()
 # 🔎 Αναλυτικά Σενάρια 
 # ---------------------------
 
+
 st.header("🔎 Αναλυτικά Σενάρια")
 
-# Αυτόματη φόρτωση των σεναρίων του Βήματος 6 (χωρίς upload)
-latest_path = None
-if "last_step6_path" in st.session_state:
-    p = Path(st.session_state["last_step6_path"])
-    if p.exists():
-        latest_path = p
-
-if latest_path is None:
-    latest = _find_latest_step6()
-    if latest is not None:
-        latest_path = latest
-        st.session_state["last_step6_path"] = str(latest_path)
-
-if latest_path is None:
-    st.info("Δεν βρέθηκε πρόσφατο αρχείο σεναρίων 1→6. Τρέξε πρώτα την «Εκτέλεση Κατανομής».")
-else:
-    st.success(f"Φορτώθηκε αυτόματα: **{latest_path.name}**")
-
-    # Λήψη Excel (προαιρετικά)
-    st.download_button(
-        "⬇️ Κατέβασε Excel (1→6)",
-        data=_read_file_bytes(latest_path),
-        file_name=latest_path.name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
-
+# 1) Βρες αυτόματα το πιο πρόσφατο αρχείο Βήματος 6 (όλα τα σενάρια)
+auto_s6_path = _find_latest_step6()
+xls = None
+if auto_s6_path and Path(auto_s6_path).exists():
+    st.success(f"Φορτώθηκε αυτόματα: {Path(auto_s6_path).name}")
     try:
-        xls = pd.ExcelFile(latest_path)
-        scenario_sheets = [s for s in xls.sheet_names if s != "Σύνοψη"]
-        if not scenario_sheets:
-            st.warning("Το αρχείο δεν περιέχει φύλλα σεναρίων (εκτός από 'Σύνοψη').")
-        else:
-            st.caption(f"Βρέθηκαν {len(scenario_sheets)} σενάρια.")
-            sel = st.selectbox("Επίλεξε σενάριο για προεπισκόπηση", scenario_sheets, index=0, key="scenario_pick_view")
-            df = pd.read_excel(latest_path, sheet_name=sel)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+        xls = pd.ExcelFile(auto_s6_path)
     except Exception as e:
-        st.exception(e)
+        st.error(f"Αποτυχία ανοίγματος: {e}")
+
+# 2) Fallback σε manual upload (αν δεν βρέθηκε αρχείο ή άνοιγμα απέτυχε)
+if xls is None:
+    uploaded_s6 = st.file_uploader("Φόρτωσε αρχείο STEP1_6_PER_SCENARIO_*.xlsx", type=["xlsx"], key="u_s6_all")
+    if uploaded_s6 is not None:
+        try:
+            xls = pd.ExcelFile(uploaded_s6)
+        except Exception as e:
+            st.error(f"Αποτυχία ανοίγματος: {e}")
+
+if xls is None:
+    st.info("Δεν βρέθηκε έγκυρο αρχείο Βήματος 6. Δημιούργησέ το στην ενότητα εξαγωγής (1→6).")
+else:
+    # 3) Διάλεξε μόνο τα σωστά sheets (ΣΕΝΑΡΙΟ_*). Αγνόησε τυχόν 'Sheet1' κ.λπ.
+    scenario_sheets = [s for s in xls.sheet_names if str(s).startswith("ΣΕΝΑΡΙΟ_")]
+    if not scenario_sheets:
+        st.warning("Δεν υπάρχουν φύλλα 'ΣΕΝΑΡΙΟ_*' (ίσως το αρχείο είναι κενό).")
+    else:
+        selected = st.selectbox("Επέλεξε σενάριο για προεπισκόπηση", options=scenario_sheets)
+        df_prev = xls.parse(selected)
+        if df_prev.empty:
+            st.warning("Το φύλλο είναι κενό.")
+        else:
+            st.dataframe(df_prev.head(200), use_container_width=True)
+            # παροχή download κουμπιού
+            st.download_button("⬇️ Κατέβασε Excel (1→6)", data=Path(auto_s6_path).read_bytes() if auto_s6_path else None,
+                               file_name=Path(auto_s6_path).name if auto_s6_path else "STEP1_6_PER_SCENARIO.xlsx",
+                               disabled=(auto_s6_path is None))
