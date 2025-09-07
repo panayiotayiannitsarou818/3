@@ -105,12 +105,76 @@ def _greek_norm(x: Any) -> str:
         return "Ο"
     # unknown -> empty
     return ""
-def _friends_list(x: Any) -> List[str]:
-    if pd.isna(x): return []
-    parts = re.split(r"[;,|/\n]+", str(x))
-    return [p.strip() for p in parts if p.strip()]
 
-# ------------------------- Column detection -------------------
+def _friends_list(x):
+    """
+    Return a clean Python list of friend names from a cell value.
+    Handles:
+      - NaN/None/empty -> []
+      - Python list/tuple/set -> list(str)
+      - numpy arrays -> list(str)
+      - JSON-like strings: "['A','B']" or '["A","B"]'
+      - Plain strings with separators: comma/semicolon/slash/pipe/ampersand/space-και-space
+    Never raises "truth value of empty array is ambiguous".
+    """
+    import pandas as pd
+    import numpy as np
+    import ast
+    import re
+
+    # Fast path for obvious empties
+    if x is None:
+        return []
+    # If scalar, we can safely use pd.isna
+    try:
+        is_scalar = np.isscalar(x) or isinstance(x, (pd.Timestamp, pd.Timedelta))
+    except Exception:
+        is_scalar = True
+    if is_scalar:
+        try:
+            if pd.isna(x):
+                return []
+        except Exception:
+            pass
+
+    # Already a list/tuple/set/ndarray
+    if isinstance(x, (list, tuple, set)):
+        vals = list(x)
+    elif hasattr(x, "tolist") and not isinstance(x, str):
+        # numpy array etc.
+        try:
+            vals = list(x.tolist())
+        except Exception:
+            vals = [str(x)]
+    else:
+        s = str(x).strip()
+        if not s or s.lower() in {"nan", "none", "null"}:
+            return []
+        # Try parse as Python/JSON list
+        if (s.startswith("[") and s.endswith("]")) or (s.startswith("(") and s.endswith(")")):
+            try:
+                parsed = ast.literal_eval(s)
+                if isinstance(parsed, (list, tuple, set)):
+                    vals = list(parsed)
+                else:
+                    vals = [parsed]
+            except Exception:
+                vals = [s]
+        else:
+            # Split by common separators (including Greek " και ")
+            s = re.sub(r"\s+και\s+", ",", s, flags=re.IGNORECASE)
+            vals = re.split(r"[;,/|&]+", s)
+
+    # Cleanup, normalize, drop empties/dummies like '-'
+    out = []
+    for v in vals:
+        if v is None:
+            continue
+        sv = str(v).strip()
+        if not sv or sv in {"-", "_"}:
+            continue
+        out.append(sv)
+    return out
 
 def _find_step_cols(df: pd.DataFrame) -> List[str]:
     cols = [c for c in df.columns if STEP_COLUMN_PATTERNS.match(str(c))]
