@@ -176,14 +176,18 @@ def build_step1_6_per_scenario(input_excel: str, output_excel: str, pick_step4: 
             df4 = df4[cols4]
             df4 = _dedup(df4)
 
+            
             # STEP 5
-            df5, _pen5 = m_step5.step5_place_remaining_students(df4.copy(), scenario_col=s4final, num_classes=None)
+            df5_tmp, _pen5 = m_step5.step5_place_remaining_students(df4.copy(), scenario_col=s4final, num_classes=None)
             s5col = f"ΒΗΜΑ5_ΣΕΝΑΡΙΟ_{sid}"
-            df5[s5col] = df5[s4final]
+            # Κρατάμε το ΒΗΜΑ4 από το df4 (πριν το Βήμα 5) και προσθέτουμε ΝΕΑ στήλη ΒΗΜΑ5 με τα αποτελέσματα του Βήματος 5
+            df5 = df4.copy()
+            df5[s5col] = df5_tmp[s4final]
             cols5 = df5.columns.tolist()
             if s5col in cols5: cols5.remove(s5col)
             idx4 = cols5.index(s4final) + 1 if s4final in cols5 else len(cols5)
             cols5 = cols5[:idx4] + [s5col] + cols5[idx4:]
+
             df5 = df5[cols5]
 
             # STEP 6 - ΠΡΟΣΘΗΚΗ
