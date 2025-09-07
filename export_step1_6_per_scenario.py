@@ -1,3 +1,4 @@
+import pandas as pd
 # -*- coding: utf-8 -*-
 """
 export_step1_6_per_scenario.py — ΔΙΟΡΘΩΜΕΝΟΣ exporter (1→6)
@@ -123,7 +124,7 @@ def build_step1_6_per_scenario(input_excel: str, output_excel: str, pick_step4: 
                 df3.copy(), assigned_column=s3col, num_classes=None, max_results=5
             )
             s4final = f"ΒΗΜΑ4_ΣΕΝΑΡΙΟ_{sid}"
-            if res4:
+            if (res4 is not None) and not (isinstance(res4, pd.DataFrame) and res4.empty):
                 df4_mat = m_step4.export_step4_scenarios(df3.copy(), res4, assigned_column=s3col)
                 if str(pick_step4).lower() == "best":
                     penalties = [p for (_, p) in res4]
