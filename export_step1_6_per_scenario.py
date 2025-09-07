@@ -123,26 +123,48 @@ def build_step1_6_per_scenario(input_excel: str, output_excel: str, pick_step4: 
             res4 = m_step4.apply_step4_with_enhanced_strategy(
                 df3.copy(), assigned_column=s3col, num_classes=None, max_results=5
             )
+            
             s4final = f"ΒΗΜΑ4_ΣΕΝΑΡΙΟ_{sid}"
             if (res4 is not None) and not (isinstance(res4, pd.DataFrame) and res4.empty):
-                df4_mat = m_step4.export_step4_scenarios(df3.copy(), res4, assigned_column=s3col)
-                if str(pick_step4).lower() == "best":
-                    penalties = [p for (_, p) in res4]
-                    best_idx = int(min(range(len(penalties)), key=lambda i: penalties[i]))
-                    src = f"ΒΗΜΑ4_ΣΕΝΑΡΙΟ_{best_idx+1}"
+                # If step4 returns a DataFrame (new API), use it directly; else expect legacy list-of-(df,penalty)
+                if isinstance(res4, pd.DataFrame):
+                    df4_mat = res4
+                    # Decide the source Step4 column
+                    if str(pick_step4).lower() == "best":
+                        try:
+                            _k, best_col = m_step4._pick_best_step4_col(df4_mat) if hasattr(m_step4, "_pick_best_step4_col") else (None, None)
+                        except Exception:
+                            best_col = None
+                        # fallback: first ΒΗΜΑ4_ΣΕΝΑΡΙΟ_k
+                        if best_col is None or best_col not in df4_mat.columns:
+                            cands4 = [c for c in df4_mat.columns if str(c).startswith("ΒΗΜΑ4_ΣΕΝΑΡΙΟ_")]
+                            best_col = cands4[0] if cands4 else None
+                        src = best_col if best_col else None
+                    else:
+                        try:
+                            idx_pick = max(1, min(int(pick_step4), 99))
+                        except Exception:
+                            idx_pick = 1
+                        src = f"ΒΗΜΑ4_ΣΕΝΑΡΙΟ_{idx_pick}"
                 else:
-                    try:
-                        idx_pick = max(1, min(int(pick_step4), len(res4)))
-                    except Exception:
-                        idx_pick = 1
-                    src = f"ΒΗΜΑ4_ΣΕΝΑΡΙΟ_{idx_pick}"
+                    # Legacy behavior: res4 is iterable of scenarios with penalties
+                    df4_mat = m_step4.export_step4_scenarios(df3.copy(), res4, assigned_column=s3col)
+                    if str(pick_step4).lower() == "best":
+                        penalties = [p for (_, p) in res4]
+                        best_idx = int(min(range(len(penalties)), key=lambda i: penalties[i]))
+                        src = f"ΒΗΜΑ4_ΣΕΝΑΡΙΟ_{best_idx+1}"
+                    else:
+                        try:
+                            idx_pick = max(1, min(int(pick_step4), len(res4)))
+                        except Exception:
+                            idx_pick = 1
+                        src = f"ΒΗΜΑ4_ΣΕΝΑΡΙΟ_{idx_pick}"
+                # Build df4 using the chosen src
                 cands4 = [c for c in df4_mat.columns if str(c).startswith("ΒΗΜΑ4_")]
-                if src in df4_mat.columns:
+                if src and (src in df4_mat.columns):
                     df4 = df4_mat.rename(columns={src: s4final})
                 elif cands4:
                     df4 = df4_mat.rename(columns={cands4[0]: s4final})
-                else:
-                    df4 = df3.copy(); df4[s4final] = ""
             else:
                 df4 = df3.copy(); df4[s4final] = ""
 
